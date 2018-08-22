@@ -1,0 +1,131 @@
+I've just go my head around these, and so I'll share an example as you already have descriptions but at the moment one advantage I see is to get around the Circular Reference style warnings where you can't have 2 projects referencing each other.
+
+Let's assume an application downloads an XML, and then saves the XML to a database.
+
+I have 2 projects here which build my solution: FTP and a SaveDatabase.
+
+So, our application starts by looking for any downloads and downloading the file(s) then it calls the SaveDatabase project.
+
+Now, our application needs to notify the FTP site when a file is saved to the database by uploading a file with Meta data (ignore why, it's a request from the owner of the FTP site). The issue is at what point and how? We need a new method called NotifyFtpComplete() but in which of our projects should it be saved too - FTP or SaveDatabase? Logically, the code should live in our FTP project. But, this would mean our NotifyFtpComplete will have to be triggered or, it will have to wait until the save is complete, and then query the database to ensure it is in there. What we need to do is tell our SaveDatabase project to call the NotifyFtpComplete() method direct but we can't; we'd get a ciruclar reference and the NotifyFtpComplete() is a private method. What a shame, this would have worked. Well, it can.
+
+During our application's code, we would have passed parameters between methods, but what if one of those parameters was the NotifyFtpComplete method. Yup, we pass the method, with all of the code inside as well. This would mean we could execute the method at any point, from any project. Well, this is what the delegate is. This means, we can pass the NotifyFtpComplete() method as a parameter to our SaveDatabase() class. At the point it saves, it simply executes the delegate.
+
+See if this crude example helps (pseudo code). We will also assume that the application starts with the Begin() method of the FTP class.
+
+class FTP
+{
+    public void Begin()
+    {
+        string filePath = DownloadFileFromFtpAndReturnPathName();
+
+        SaveDatabase sd = new SaveDatabase();
+        sd.Begin(filePath, NotifyFtpComplete());
+    }
+
+    private void NotifyFtpComplete()
+    {
+        //Code to send file to FTP site
+    }
+}
+
+
+class SaveDatabase
+{
+    private void Begin(string filePath, delegateType NotifyJobComplete())
+    {
+        SaveToTheDatabase(filePath);
+
+        //InvokeTheDelegate - here we can execute the NotifyJobComplete method at our preferred moment in the application, despite the method being private and belonging to a different class. 
+        NotifyJobComplete.Invoke();
+    }
+}
+
+So, with that explained, we can do it for real now with this Console Application using C#
+
+using System;
+
+namespace ConsoleApplication1
+{
+    //I've made this class private to demonstrate that the SaveToDatabase cannot have any knowledge of this Program class.
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            //Note, this NotifyDelegate type is defined in the SaveToDatabase project
+            NotifyDelegate nofityDelegate = new NotifyDelegate(NotifyIfComplete);
+
+            SaveToDatabase sd = new SaveToDatabase();            
+            sd.Start(nofityDelegate);
+            Console.ReadKey();
+        }
+
+        //this is the method which will be delegated - the only thing it has in common with the NofityDelegate is that it takes 0 parameters and that it returns void. However, it is these 2 which are essential. It is really important to notice that it writes a variable which, due to no constructor, has not yet been called (so _notice is not initialized yet). 
+    private static void NotifyIfComplete()
+    {
+        Console.WriteLine(_notice);
+    }
+
+    private static string _notice = "Notified";
+    }
+
+
+    public class SaveToDatabase
+    {
+        public void Start(NotifyDelegate nd)
+        {
+            Console.WriteLine("Yes, I shouldn't write to the console from here, it's just to demonstrate the code executed.");
+            Console.WriteLine("SaveToDatabase Complete");
+            Console.WriteLine(" ");
+            nd.Invoke();
+        }
+    }
+    public delegate void NotifyDelegate();
+}
+I suggest you step through the code and see when _notice is called and when the method (delegate) is called as this, I hope, will make things very clear.
+
+However, lastly, we can make it more useful by changing the delegate type to include a parameter.
+
+using System.Text;
+
+namespace ConsoleApplication1
+{
+    //I've made this class private to demonstrate that the SaveToDatabase cannot have any knowledge of this Program class.
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            SaveToDatabase sd = new SaveToDatabase();
+
+//Please note, that although NotifyIfComplete() takes a string parameter, we do not declare it - all we want to do is tell C# where the method is so it can be referenced later - we will pass the paramater later.
+            NotifyDelegateWithMessage nofityDelegateWithMessage = new NotifyDelegateWithMessage(NotifyIfComplete);
+
+            sd.Start(nofityDelegateWithMessage);
+
+            Console.ReadKey();
+        }
+
+        private static void NotifyIfComplete(string message)
+        {
+            Console.WriteLine(message);
+        }
+    }
+
+
+    public class SaveToDatabase
+    {
+        public void Start(NotifyDelegateWithMessage nd)
+        {
+            //To simulate a saving fail or success, I'm just going to check the current time (well, the seconds) and store the value as variable.
+            string message = string.Empty;
+            if (DateTime.Now.Second > 30)
+                message = "Saved";
+            else
+                message = "Failed";
+
+            //It is at this point we pass the parameter to our method.
+            nd.Invoke(message);
+        }
+    }
+
+    public delegate void NotifyDelegateWithMessage(string message);
+}
