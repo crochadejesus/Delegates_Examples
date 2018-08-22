@@ -1,0 +1,33 @@
+One function of a delegate is to act as a function pointer. In a case of a program I had to make, I needed to run similar functions and call them in an array style.
+
+For example, if you had a few functions.
+
+double play(int data1, int data2)
+double work(int x, int y)
+Those two have the same signature. They both return doubles, and the both take 2 ints. They could by called with a delegate
+
+delegate double myFunctions(int a, int b);
+So lets say I needed to run "play" and "work" from the same function. I could do it like this:
+
+public void do_something( myFunctions action, String information)
+{
+   int input1;
+   int input2;
+   /*
+     Lets say the string was.... the dimensions of a rectangle expressed as 5x8
+     here we parse the string so...
+
+     information is "5x8:
+     set input1 to 5
+     set input2 to 8
+   */
+
+   //then run the function that was passed in.
+   action(input1, input2);
+}
+And you would call this function like:
+
+do_something(play, "5x8");
+//or
+do_something(work, "484x237");
+And the comment area there is what I think would make this not a trivial example. Basically, at least in this context, it can help for modularizing programs.
